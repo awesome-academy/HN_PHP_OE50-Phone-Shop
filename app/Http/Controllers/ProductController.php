@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Products\UpdateProductRequest;
 use App\Models\Product;
 use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Models\Image;
 
 class ProductController extends Controller
 {
@@ -16,8 +18,9 @@ class ProductController extends Controller
      */
     public function index()
     {
-        $products = DB::table('products')
-            ->select('*')
+        $products = Product::with('images')
+            ->select('products.*')
+            ->orderBy('products.created_at', 'DESC')
             ->paginate(config('product.PAGINATION_NUMBER'));
 
         return view('admin.product.index', compact('products'));
@@ -30,7 +33,9 @@ class ProductController extends Controller
      */
     public function create()
     {
-        //
+        $categories = Category::all();
+
+        return view('admin.product.addproduct', compact('categories'));
     }
 
     /**
@@ -41,7 +46,35 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $data = [];
+        $files = $request->file('images');
+        if ($request->hasFile("images")) {
+            Product::create([
+                'name' => $request->name,
+                'slug' => slugHelper($request->name),
+                'price' => $request->price,
+                'description' => $request->description,
+                'accessories' => $request->accessories,
+                'warranty' => $request->warranty,
+                'color' => $request->color,
+                'category_id' => $request->category_id,
+            ]);
+
+            $product = Product::select('id', 'name')->where('name', '=', $request->name)->first();
+
+            foreach ($files as $key => $file) {
+                $imageName = slugHelper($product->name).'-'.time().'.'.$file->extension();
+                $file->move(public_path('images'), $imageName);
+                $data[$key] = [
+                    'product_id' => $product->id,
+                    'name' => $imageName,
+                ];
+            }
+
+            Image::insert($data);
+        }
+
+        return redirect()->back()->with('messages', __('create_success'));
     }
 
     /**
@@ -63,7 +96,10 @@ class ProductController extends Controller
      */
     public function edit($id)
     {
-        //
+        $product = Product::findOrFail($id);
+        $categories = Category::all();
+
+        return view('admin.product.editproduct', compact('product', 'categories'));
     }
 
     /**
@@ -73,9 +109,36 @@ class ProductController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, $id)
+    public function update(UpdateProductRequest $request, $id)
     {
-        //
+        $data = [];
+        $files = $request->file('images');
+        $product = Product::findOrFail($id);
+        $product->update([
+            'name' => $request->name,
+            'slug' => slugHelper($request->name),
+            'price' => $request->price,
+            'description' => $request->description,
+            'accessories' => $request->accessories,
+            'warranty' => $request->warranty,
+            'color' => $request->color,
+            'status' => $request->status,
+            'category_id' => $request->category_id,
+        ]);
+        if ($request->hasFile("images")) {
+            foreach ($files as $key => $file) {
+                $imageName = slugHelper($product->name).'-'.time().'.'.$file->extension();
+                $file->move(public_path('images'), $imageName);
+                $data[$key] = [
+                    'product_id' => $product->id,
+                    'name' => $imageName,
+                ];
+            }
+
+            Image::insert($data);
+        }
+
+        return redirect()->back()->with('messages', __('create_successfull'));
     }
 
     /**
